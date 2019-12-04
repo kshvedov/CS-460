@@ -86,7 +86,7 @@ main(int argc, char *argv[])
         close(1);
         gets(upassword);
         out = open(mytty, 1);
-        print2f("\n");
+        print2f("\n\r");
 
         int pswdFile = open("/etc/passwd", 0);
 
@@ -109,7 +109,7 @@ main(int argc, char *argv[])
                 exec(prog);
             }
         }
-        print2f("login failed, try again\n\r");
+        print2f("\rlogin failed, try again\n\r");
         close(pswdFile);
     }
 }
