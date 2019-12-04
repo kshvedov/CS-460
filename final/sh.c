@@ -2,18 +2,24 @@
 #include "ucode.c"
 // user commands and syscall interface
 char cmdline[128], cmd[64];
-char cmdlineb[128];
+char cmdlineb[128], tknz[8][64];
+char uName[128], line[64];
 
 int newCommand()
 {
     char dir[256];
     print2f("\r***********************************************************\n");
-    print2f("\r                      KAOS SHELL\n");
+    print2f("\r  _____ _____ _____ _____    _____ _____ _____ __    __    \n");
+    print2f("\r |  |  |  _  |     |   __|  |   __|  |  |   __|  |  |  |   \n");
+    print2f("\r |    -|     |  |  |__   |  |__   |     |   __|  |__|  |__ \n");
+    print2f("\r |__|__|__|__|_____|_____|  |_____|__|__|_____|_____|_____|\n");
     print2f("\r***********************************************************\n");
-    //printf("[ls|cd|pwd|mkdir|rmdir|creat|link|unlink|symlink|readlink|stat|chmod|touch|quit]\n");
-    //printf("[open|close|lseek|pfd|read|write|cat|cp|mv|mount|unmount]\n");
+
+    print2f("\rCMD's: [ ls | cat | more ]\n");
+    print2f("\rXTR's: [ pipes | > | >> | < ]\n");
+    print2f("\r***********************************************************\n");
     getcwd(dir);
-    printf("\rUser@kaos: %s$: ", dir);
+    printf("\r%s@kaos: %s$: ", uName, dir);
     gets(cmdline);
     print2f("\r***********************************************************\n");
     
@@ -31,6 +37,71 @@ int tokenizecmd()
     token(cmdline);
 
     return argc;
+}
+
+void tokenize(char *line)
+{
+    char *ptr = line;
+    for(int i=0; i < 7; i++)
+    {
+        char *temp;
+        temp = ptr;
+        while(*ptr != ':' && *ptr != '\0')
+        {
+            *ptr++;
+        }
+        *ptr = '\0';
+        *ptr++;
+        strcpy(tknz[i], temp);
+    }
+}
+
+int getfc(int file)
+{
+   int c, n;
+   n = read(file, &c, 1);
+   if (n==0 || c==4 || c==0 ) return EOF;  
+                                
+   return (c&0x7F);
+}
+
+int getfline(char *s, int file)
+{
+  int c;  
+  char *cp = s;
+  
+  c = getfc(file);
+
+  while ((c != EOF) && (c != '\r') && (c != '\n')){
+    *cp++ = c;
+     c = getfc(file);
+  }
+  if (c==EOF) return 0;
+
+  *cp++ = c;         // a string with last char=\n or \r
+  *cp = 0;    
+  //printf("getline: %s", s); 
+  return strlen(s);  // at least 1 because last char=\r or \n
+}
+
+void getUname()
+{
+    int pswdFile = open("/etc/passwd", 0);
+    int uid = getuid();
+
+    while(getfline(line, pswdFile)){
+        //tokenize user account line
+        tokenize(line);
+        // checks if the user id match the one pulled from file
+        if(atoi(tknz[3]) == uid)
+        {
+            close(pswdFile);
+            strcpy(uName, tknz[0]);
+            return;
+        }
+    }
+    print2f("Unexpected error, impossible!\n\r");
+    close(pswdFile);
 }
 
 int checkPipe()
@@ -173,6 +244,7 @@ main(int argc, char *argv[ ])
 {
     char t[64];
     int cmdNum;
+    getUname();
     while(1){
         //display executable commands in /bin directory
         // prompt for a command line cmdline = "cmd a1 a2 .... an"
