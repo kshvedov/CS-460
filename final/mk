@@ -8,6 +8,7 @@ sudo mount -o loop sdimage /mnt
 ./mkf ls
 ./mkf more
 ./mkf sh
+./mkf man
 
 sudo cp -av passwd /mnt/etc
 sudo ls -lt /mnt/bin

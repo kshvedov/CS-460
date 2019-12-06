@@ -13,7 +13,8 @@ int newCommand()
     print2f("\r |    -|     |  |  |__   |  |__   |     |   __|  |__|  |__ \n");
     print2f("\r |__|__|__|__|_____|_____|  |_____|__|__|_____|_____|_____|\n");
     print2f("\r***********************************************************\n");
-    print2f("\rCMD's: [ ls | cat | more | logout | exit ]\n");
+    print2f("\rCMD's: [ ls | cat | more | grep | l2u | cp | man ]\n");
+    print2f("\rmore : [ logout | exit ]\n");
     print2f("\rXTR's: [ pipes | > | >> | < ]\n");
     print2f("\r***********************************************************\n");
     getcwd(dir);
