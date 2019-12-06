@@ -68,22 +68,31 @@ char* itoa(int x, char **s)
 }
 
 //prints all details about a file
-void ls_file(char *fname)
+void ls_file(char *fname, char *loc2)
 {
     //printf("NAME:%s\n", fname);
     STAT fstat, *sp = &fstat;
     int r, i;
-    
-    if(strlen(loc) > 0 && chng == 0)
+    int l = strlen(loc2);
+
+    if (loc2[l -1] != '/' && chng == 0)
+        {
+            loc2[l++] = '/';
+            loc2[l] = '\0';
+        }
+
+    //print2f(loc2);
+    //print2f(fname);
+
+    if(strlen(loc2) > 0 && chng == 0)
     {
-        chng = 1;
-        strcat(loc, fname);
+        strcat(loc2, fname);
     }
 
-    r = stat(loc, sp);
+    r = stat(loc2, sp);
     if (r != 0)
     {
-        printf("File \"%s\" doesn't exist\n\r", fname);
+        printf("File \"%s\" doesn't exist\n\r", loc2);
         return;
     }
     
@@ -117,7 +126,10 @@ void ls_file(char *fname)
     fancyPrint2f("", s, 4);
     itoa(sp->st_size, s);
     fancyPrint2f("", s, 10);
-    printf(" %s", fname);
+    if (chng == 1)
+        printf(" %s", dUse);
+    else
+        printf(" %s", fname);
     print2f(" \n\r");
 }
 
@@ -126,6 +138,7 @@ int ls_dir(char *dname)
 {
     char buffer[1024];
     char name[256];             // EXT2 filename: 1-255 chars
+    char location[256];
     DIR *dp;
 
     int fd = open(dname, O_RDONLY);    // opendir() syscall
@@ -136,10 +149,11 @@ int ls_dir(char *dname)
 
     while(cp < 1024 + buffer)
     {
+        strcpy(location, loc);
         strcpy(name, dp->name);
         name[dp->name_len] = '\0';
 
-        ls_file(name);
+        ls_file(name, location);
 
         cp += dp->rec_len;
         dp = (DIR*)cp;
@@ -153,12 +167,15 @@ int main(int argc, char *argv[])
     int r;
     char *s;
     char filename[1024], cwd[1024];
+    chng = 0;
 
     s = argv[1];                // ls [filename]
 
     if (argc == 1)              // no parameter: ls CWD
         s = "./";
     sp = &mystat;
+
+    strcpy(dUse, s);
 
     if ((r = stat(s, sp)) < 0)  // stat() syscall
     {
@@ -180,7 +197,7 @@ int main(int argc, char *argv[])
     if ((sp->st_mode & 0xF000) == 0x4000)
         ls_dir(filename);       // list DIR
     else
-    {
-        ls_file(filename);      // list single file
+    {   chng = 1;
+        ls_file(filename, loc);      // list single file
     }
 }

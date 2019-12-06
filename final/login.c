@@ -4,8 +4,26 @@
 int in, out, err;
 int fd;
 
-char uname[128], upassword[128], whattty[64], t[64];
+int p = 1319;
+int q = 6997;
+char *salt1 = "y5r'ttFm{!~](LZE";
+char *salt2 = "-?}Wrcq]Q8TfX_aU";
+
+char uname[128], upassword[128], t[64];
 char pline[64], mytty[64], *pname[8], tknz[8][64];
+
+unsigned int encrypt(char *pass)
+{
+    unsigned int hash = p*q;
+    char s[128] = "";
+    char c;
+    strcpy(s, salt1);
+    strcat(s, pass);
+    strcat(s, salt2);
+    while (c = *pass++)
+        hash = ((hash << 5) + hash) + c;
+    return hash;
+}
 
 void tokenize(char *line)
 {
@@ -86,6 +104,7 @@ main(int argc, char *argv[])
         close(1);
         gets(upassword);
         out = open(mytty, 1);
+
         print2f("\n\r");
 
         int pswdFile = open("/etc/passwd", 0);
@@ -94,7 +113,7 @@ main(int argc, char *argv[])
             //tokenize user account line
             tokenize(line);
             // checks if the user name and password match the one listed in the file
-            if(strcmp(tknz[0], uname) == 0 && strcmp(tknz[1], upassword) == 0)
+            if(strcmp(tknz[0], uname) == 0 && atoi(tknz[1]) == encrypt(upassword))
             {
                 //change uid, gid to user's uid, gid
                 chuid(atoi(tknz[3]), atoi(tknz[2]));

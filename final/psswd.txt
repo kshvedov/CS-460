@@ -3,17 +3,7 @@ kcw:abcde:1:1:kcw user:/user/kcw:sh
 guest:mercy:2:2:guest user:/user/guest:sh
 buster:123:3:3:buster dog:/user/buster:sh
 
-sh 3 # cat f1 | grep test | grep Hap
-parent sh 3 : fork a child
-parent sh 3 : wait for child 5  to die
-child sh 5  running : cmd=cat f1 | grep test | grep Hap
-proc 5  exec grep Hap
-$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
-             KC's grep in action
-$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
-$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
-             KC's cool cat MEOW!             
-$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
-Happy testing!
-Happy testing!
-sh 3 : child 5  exit status = 0x0 
+root:1304993362:0:0:super user:/:sh
+kcw:1363696450:1:1:kcw user:/user/kcw:sh
+guest:1378051635:2:2:guest user:/user/guest:sh
+buster:951691561:3:3:buster dog:/user/buster:sh

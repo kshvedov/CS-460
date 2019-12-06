@@ -2,6 +2,19 @@
 
 #define BLKSIZE 1024
 
+int isfile(int fd)
+{
+    STAT fs;
+	// Stat stdout
+	fstat(fd, &fs);
+
+    if(((fs.st_mode & 0xF000) == 0x8000) ||
+		((fs.st_mode & 0xF000) == 0x4000) ||
+		((fs.st_mode & 0xF000) == 0xA000))
+        return 1;
+    return 0;
+}
+
 int getfc(int file)
 {
    int c, n;
@@ -53,27 +66,35 @@ int writeLine(int fd, int lines)
 int main(int argc, char *argv[ ])
 {
     print2f("\r>>>>>>>>>>>>>>>>>>>>>>>>>>KAOS MORE<<<<<<<<<<<<<<<<<<<<<<<<\n\r");
-    int fd, i, m, n, pgl = 23;
-    char c;
+    int fd, i, m, n, pgl = 23, k = 1, in = 0, out, ttyfd;
+    char c, mytty[64], c2, c3;
     fd = 0; // default to stdin
 
     if (argc > 1)
     {
         fd = open(argv[1], O_RDONLY);
+        in = 1;
         if (fd < 0) exit(1);
     }
+    else
+        k = 2;
 
-    writeLine(fd, pgl);
+    writeLine(fd, pgl*k);
+    
+    gettty(mytty);
+    ttyfd = open(mytty, O_RDONLY);
+    
+    out = isfile(1);
 
     while (1)
     {
-        c = getc();
-        if (c == '\r')
-            writeLine(fd, 1);
-        else if (c == ' ')
-            writeLine(fd, pgl);
-        
-    }
-    
+        n = read(ttyfd, &c, 1);
 
+        if (c == 4)
+            exit(0);
+        else if (c == '\r')
+            writeLine(fd, 1 * k);
+        else if (c == ' ')
+            writeLine(fd, pgl * k);
+    }
 }

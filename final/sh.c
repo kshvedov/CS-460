@@ -8,14 +8,12 @@ char uName[128], line[64];
 int newCommand()
 {
     char dir[256];
-    print2f("\n\r***********************************************************\n");
     print2f("\r  _____ _____ _____ _____    _____ _____ _____ __    __    \n");
     print2f("\r |  |  |  _  |     |   __|  |   __|  |  |   __|  |  |  |   \n");
     print2f("\r |    -|     |  |  |__   |  |__   |     |   __|  |__|  |__ \n");
     print2f("\r |__|__|__|__|_____|_____|  |_____|__|__|_____|_____|_____|\n");
     print2f("\r***********************************************************\n");
-
-    print2f("\rCMD's: [ ls | cat | more ]\n");
+    print2f("\rCMD's: [ ls | cat | more | logout | exit ]\n");
     print2f("\rXTR's: [ pipes | > | >> | < ]\n");
     print2f("\r***********************************************************\n");
     getcwd(dir);
@@ -30,6 +28,30 @@ int newCommand()
             cmdline[len-1] = '\0';
     }
     strcpy(cmdlineb, cmdline);
+}
+
+void logOut()
+{
+    print2f("             .,-:;//;:=,\n\r");
+    print2f("        . :H@@@MM@M#H/.,+%;,\n\r");
+    print2f("      ,/X+ +M@@M@MM%=,-%HMMM@X/,\n\r");
+    print2f("     -+@MM; $M@@MH+-,;XMMMM@MMMM@+-\n\r");
+    print2f("    ;@M@@M- XM@X;. -+XXXXXHHH@M@M#@/.\n\r");
+    print2f("  ,%MM@@MH ,@%=  XIT EXI  .---=-=:=,.\n\r");
+    print2f("  -@#@@@MX .,  IT EXIT EXI -%HX$$%%%+;\n\r");
+    print2f(" =-./@M@M$  T EXIT EXIT EXI  .;@MMMM@MM:\n\r");
+    print2f(" X@/ -$MM/  EXIT EXIT EXIT E  .+MM@@@M$\n\r");
+    print2f(",@M@H: :@:  IT EXIT EXIT EXI  . -X#@@@@-\n\r");
+    print2f(",@@@MMX, .   EXIT EXIT EXIT   /H- ;@M@M=\n\r");
+    print2f(".H@@@@M@+,  IT EXIT EXIT EXI  %MM+..%#$.\n\r");
+    print2f(" /MMMM@MMH/.  IT EXIT EXIT E  XM@MH; -;\n\r");
+    print2f("  /%+%$XHH@$=  XIT EXIT E  , .H@@@@MX,\n\r");
+    print2f("   .=--------.   XIT EX  -%H.,@@@@@MX,\n\r");
+    print2f("   .%MM@@@HHHXX$$$%+- .:$MMX -M@@MM%.\n\r");
+    print2f("     =XMMM@MM@MM#H;,-+HMM@M+ /MMMX=\n\r");
+    print2f("       =%@M@M#@$-.=$@MM@@@M; %M%=\n\r");
+    print2f("          :+$+-,/H#MMMMMMM@- -,\n\r");
+    print2f("               =++%%%%+/:-.\n\r");
 }
 
 int tokenizecmd()
@@ -117,26 +139,26 @@ int checkPipe()
 
 void execCmd(char** input)
 {
-    int i = 0, j = 0;
+    int i = 0, j = 0, fd = 0;
     char excmd[128] = {0};
     for(i = 0; input[i] != 0; i++)
     {
         if (strcmp(input[i], "<") == 0) // input
         {
             close(0);
-            int fd = open(input[i + 1], O_RDONLY);
+            fd = open(input[i + 1], O_RDONLY);
             input[i] = 0;
         }
         else if (strcmp(input[i], ">") == 0) // output
         {
             close(1);
-            int fd = open(input[i + 1], O_WRONLY | O_CREAT);
+            fd = open(input[i + 1], O_WRONLY | O_CREAT);
             input[i] = 0;
         }
         else if (strcmp(argv[i], ">>") == 0) // output and append
         {
             close(1);
-            int fd = open(input[i + 1], O_WRONLY | O_APPEND | O_CREAT);
+            fd = open(input[i + 1], O_WRONLY | O_APPEND | O_CREAT);
             input[i] = 0;
         }
     }
@@ -149,7 +171,13 @@ void execCmd(char** input)
             if ((j+1) < i)
                 strcat(excmd, " ");
         }
+        else
+            j = i;
     }
+
+    /*printi(fd);
+    print2f(excmd);
+    print2f("\n\r");*/
     exec(excmd);
 }
 
@@ -195,6 +223,8 @@ void execPipe(int pipeNum, char** input)
 
     if(pid)//parent as pipe Reader
     {
+        //printf("PARENT PIPE:::PID: %d PPID: %d PRI: %d\n\r", getpid(), getppid(), getpri());
+        //printf("PD0: %d PD1: %d\n\r", pd[0], pd[1]);
         close(pd[1]);
         close(0);
         dup2(pd[0], 0);
@@ -205,6 +235,8 @@ void execPipe(int pipeNum, char** input)
     }
     else//child as pipe Writer
     {
+        //printf("CHILD PIPE:::PID: %d PPID: %d PRI: %d\n\r", getpid(), getppid(), getpri());
+        //printf("PD0: %d PD1: %d\n\r", pd[0], pd[1]);
         close(pd[0]);
         close(1);
         dup2(pd[1], 1);
@@ -220,6 +252,16 @@ int execCmdL()
     strcpy(cmd, argv[0]);
     if (!strcmp(cmd,"exit"))
         exit(0);
+
+    if (!strcmp(cmd,"logout"))
+        {
+            print2f("Logging out");
+            print2f(".");
+            print2f(".");
+            print2f(".\n\r");
+            logOut();
+            exit(0);
+        }
 
     opipe = checkPipe();
 
