@@ -1,13 +1,22 @@
+/***************************************************************/
+//Konstantin Shvedov
+/***************************INIT.C******************************/
+// This file containts all the initiallisation code needed to
+// launch 3 login process:
+// One on Consle, one on ttyS0 and one on ttyS1
+/***************************************************************/
+
 #ifndef INIT_C
 #define INIT_C
 
 #include "ucode.c"
-#include "kaostypes.h"
 
 int console, serial0, serial1;
 int in, out, err;
 char t[64];
 
+// Concatinates the port onto "login " so it can be passed
+// on to the exec function which launches the port
 void login(char *s)
 {
     char temp[64] = "login ";
@@ -15,6 +24,9 @@ void login(char *s)
     exec(temp);
 }
 
+// This is the P1 process that keeps all the logins up
+// if any one of turns into a zombie, it launches a new
+// replacement one and then continues waiting
 void parent()              // P1's code
 {
     int pid, status;
@@ -56,7 +68,10 @@ void parent()              // P1's code
     }
 }
 
-int main(void)
+// This is the main portion of init
+// P1 forks 3 process's and executes a login for there ports
+// P1 then waits for them to become zombies in parent() 
+int main(int argc, char *argv[ ])
 {
     int pid;
     pid = getpid();

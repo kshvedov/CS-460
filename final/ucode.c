@@ -14,6 +14,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ********************************************************************/
 
+#ifndef UCODE_C
+#define UCODE_C
 
 typedef unsigned char   u8;
 typedef unsigned short u16;
@@ -551,3 +553,5 @@ int strcasecmp(char *s1, char *s2)
   //printf("t2=%s\n", t1, t2);
   return strcmp(t1, t2);
 }
+
+#endif

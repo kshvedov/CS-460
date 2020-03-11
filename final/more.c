@@ -1,38 +1,24 @@
+/***************************************************************/
+//Konstantin Shvedov
+/****************************MORE.C*****************************/
+// More function, based of cat in many way, will allow a person
+// to go through text using space (screen) or enter (line)
+/***************************************************************/
 #include "ucode.c"
+#include "xtr.c"
 
 #define BLKSIZE 1024
 
-int isfile(int fd)
-{
-    STAT fs;
-	// Stat stdout
-	fstat(fd, &fs);
-
-    if(((fs.st_mode & 0xF000) == 0x8000) ||
-		((fs.st_mode & 0xF000) == 0x4000) ||
-		((fs.st_mode & 0xF000) == 0xA000))
-        return 1;
-    return 0;
-}
-
-int getfc(int file)
-{
-   int c, n;
-   n = read(file, &c, 1);
-   if (n==0 || c==4 || c==0 ) return EOF;  
-                                
-   return (c&0x7F);
-}
-
-int getfline(char *s, int file)
+int getmfline(char *s, int file)
 {
   int c;  
   char *cp = s;
   
   c = getfc(file);
 
-  while ((c != EOF) && (c != '\r') && (c != '\n')){
-    *cp++ = c;
+  while ((c != EOF) && (c != '\n')){
+    if (c != '\r')
+        *cp++ = c;
      c = getfc(file);
   }
   if (c==EOF) return 0;
@@ -50,7 +36,7 @@ int writeLine(int fd, int lines)
 
     for(int i = 0; i < lines; i++)
     {
-        if(n = getfline(buf, fd))
+        if(n = getmfline(buf, fd))
         {
             buf[n] = '\r';
             n++;
@@ -66,7 +52,7 @@ int writeLine(int fd, int lines)
 int main(int argc, char *argv[ ])
 {
     print2f("\r>>>>>>>>>>>>>>>>>>>>>>>>>>KAOS MORE<<<<<<<<<<<<<<<<<<<<<<<<\n\r");
-    int fd, i, m, n, pgl = 23, k = 1, in = 0, out, ttyfd;
+    int fd, i, m, n, pgl = 23, in = 0, out, ttyfd;
     char c, mytty[64], c2, c3;
     fd = 0; // default to stdin
 
@@ -76,11 +62,9 @@ int main(int argc, char *argv[ ])
         in = 1;
         if (fd < 0) exit(1);
     }
-    else
-        k = 2;
-
-    writeLine(fd, pgl*k);
+    writeLine(fd, pgl);
     
+    //close(0);
     gettty(mytty);
     ttyfd = open(mytty, O_RDONLY);
     
@@ -93,8 +77,8 @@ int main(int argc, char *argv[ ])
         if (c == 4)
             exit(0);
         else if (c == '\r')
-            writeLine(fd, 1 * k);
+            writeLine(fd, 1);
         else if (c == ' ')
-            writeLine(fd, pgl * k);
+            writeLine(fd, pgl);
     }
 }

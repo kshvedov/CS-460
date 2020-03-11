@@ -1,7 +1,16 @@
+/****************************************************************/
+//Konstantin Shvedov
+/****************************GREP.C******************************/
+// GREP searches for a pattern from any kind of redirection
+// and prints to any
+/***************************************************************/
+
 #include "ucode.c"
+#include "xtr.c"
 
 #define BLKSIZE 1024
 
+//checks if a string contains another
 int contains(char *string, char *pattern)
 {
     int sl= 0, pl = 0, s = 0;
@@ -21,61 +30,7 @@ int contains(char *string, char *pattern)
     return 0;
 }
 
-int getfc(int file)
-{
-   int c, n;
-   n = read(file, &c, 1);
-   if (n==0 || c==4 || c==0 ) return EOF;  
-                                
-   return (c&0x7F);
-}
-
-int getfline(char *s, int file)
-{
-  int c;  
-  char *cp = s;
-  
-  c = getfc(file);
-
-  while ((c != EOF) && (c != '\r') && (c != '\n')){
-    *cp++ = c;
-     c = getfc(file);
-  }
-  if (c==EOF) return 0;
-
-  *cp++ = c;         // a string with last char=\n or \r
-  *cp = 0;    
-  //printf("getline: %s", s); 
-  return strlen(s);  // at least 1 because last char=\r or \n
-}
-
-int redirection()
-{
-	STAT fs, fs2;
-	// Stat stdout
-	fstat(0, &fs);
-    fstat(1, &fs2);
-    //printi(fs.st_dev);
-
-
-    if (fs.st_dev == fs2.st_dev && fs.st_dev > 0)
-        return 0;
-    return 1;
-}
-
-int isfile(int fd)
-{
-    STAT fs;
-	// Stat stdout
-	fstat(fd, &fs);
-
-    if(((fs.st_mode & 0xF000) == 0x8000) ||
-		((fs.st_mode & 0xF000) == 0x4000) ||
-		((fs.st_mode & 0xF000) == 0xA000))
-        return 1;
-    return 0;
-}
-
+//main function for grep argv[1] is pattern
 int main(int argc, char *argv[ ])
 {
     print2f("\r>>>>>>>>>>>>>>>>>>>>>>>>>KAOS GREP<<<<<<<<<<<<<<<<<<<<<<<<<<\n\r");
@@ -105,9 +60,9 @@ int main(int argc, char *argv[ ])
     //printi(out);
     i = 0;
     while (n = read(fd, &c, 1)){
-        if (in == 0)
+        if (in == 0) // if from stdin
         {
-            if (afd == 0)
+            if (afd == 0) // if more than 3 redirections
             {
                 if (c == 4)
                 {

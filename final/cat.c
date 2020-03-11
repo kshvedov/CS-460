@@ -1,38 +1,20 @@
+/***************************************************************/
+//Konstantin Shvedov
+/****************************CAT.C******************************/
+// My cat, this cat can print from anywhere to anywhere, no matter
+// the redirections and amount of pipes
+/***************************************************************/
+
 #include "ucode.c"
+#include "xtr.c"
 
 #define BLKSIZE 4096
 
-int redirection()
-{
-	STAT fs, fs2;
-	// Stat stdout
-	fstat(0, &fs);
-    fstat(1, &fs2);
-    //printi(fs.st_dev);
-
-
-    if (fs.st_dev == fs2.st_dev && fs.st_dev > 0)
-        return 0;
-    return 1;
-}
-
-int isfile(int fd)
-{
-    STAT fs;
-	// Stat stdout
-	fstat(fd, &fs);
-
-    if(((fs.st_mode & 0xF000) == 0x8000) ||
-		((fs.st_mode & 0xF000) == 0x4000) ||
-		((fs.st_mode & 0xF000) == 0xA000))
-        return 1;
-    return 0;
-}
-
+// main for cat
 int main(int argc, char *argv[ ])
 {
     print2f("\r>>>>>>>>>>>>>>>>>>>>>>>>KAOS CAT ROAR<<<<<<<<<<<<<<<<<<<<<<\n\r");
-    int fd, afd, in = 0, out, outfd, i, m, n, len, change;
+    int fd, afd, in = 0, out, i, m, n, len, change;
     char buf[BLKSIZE] = "", c = 0, mytty;
     STAT fs;
     fd = 0; // default to stdin
@@ -49,18 +31,13 @@ int main(int argc, char *argv[ ])
     afd = redirection();
     out = isfile(1);
 
-    fstat(1, &fs);
-    outfd = fs.st_dev;
-
-    //printi(in);
-    //printi(out);
     i = 0;
     while (n = read(fd, &c, 1)){
-        if (in == 0)
+        if (in == 0) //if reading from stdin
         {
-            if (afd == 0)
+            if (afd == 0) //if more than three cats
             {
-                if (c == 4)
+                if (c == 4) //ctrl-d is pressed
                 {
                     exit(0);
                 }
@@ -86,7 +63,7 @@ int main(int argc, char *argv[ ])
                     write(1, buf, len);
                     i = 0;
                 }
-                else
+                else // while return isnt pressed
                 {   
                     cr = '\r';
                     buf[i++] = c;
@@ -120,7 +97,7 @@ int main(int argc, char *argv[ ])
         }
         else
         {
-            if(out == 0)
+            if(out == 0) // if outputing to stdout
             {
                 mputc(c);
             }

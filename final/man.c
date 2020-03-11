@@ -1,3 +1,8 @@
+/***************************************************************/
+//Konstantin Shvedov
+/****************************MAN.C******************************/
+// Manual page for all funtions implemented
+/***************************************************************/
 #include "ucode.c"
 void ls(void);
 void cat(void);
@@ -6,6 +11,8 @@ void grep(void);
 void l2u(void);
 void cp(void);
 
+// asks the user if no function given and then calls function
+// to print description
 int main(int argc, char *argv[])
 {
     char manPage[64];

@@ -1,0 +1,1260 @@
+/***************************************************************/
+//Konstantin Shvedov
+/***************************INIT.C******************************/
+// This file containts all the initiallisation code needed to
+// launch 3 login process:
+// One on Consle, one on ttyS0 and one on ttyS1
+/***************************************************************/
+
+#ifndef INIT_C
+#define INIT_C
+
+#include "ucode.c"
+
+int console, serial0, serial1;
+int in, out, err;
+char t[64];
+
+// Concatinates the port onto "login " so it can be passed
+// on to the exec function which launches the port
+void login(char *s)
+{
+    char temp[64] = "login ";
+    kstrcat(temp, s);
+    exec(temp);
+}
+
+// This is the P1 process that keeps all the logins up
+// if any one of turns into a zombie, it launches a new
+// replacement one and then continues waiting
+void parent()              // P1's code
+{
+    int pid, status;
+    while(1){
+        printf("INIT : wait for ZOMBIE child\n");
+        pid = wait(&status);
+
+        if (pid==console) // if console login process died
+        {
+            printf("INIT: forks a new console login\n");
+            console = fork(); // fork another one
+            if (console)
+                continue;
+            else
+                login("/dev/tty0"); // new console login process
+        }
+
+        if (pid==serial0) // if serial0 login process died
+        {
+            printf("INIT: forks a new serial0 login\n");
+            serial0 = fork(); // fork another one
+            if (serial0)
+                continue;
+            else
+                login("/dev/ttyS0"); // new serial0 login process
+        }
+
+        if (pid==serial1) // if serial1 login process died
+        {
+            printf("INIT: forks a new serial1 login\n");
+            serial1 = fork(); // fork another one
+            if (serial1)
+                continue;
+            else
+                login("/dev/ttyS1"); // new serial1 login process
+        }
+
+        printf("INIT: I just buried an orphan child proc %d\n", pid);
+    }
+}
+
+// This is the main portion of init
+// P1 forks 3 process's and executes a login for there ports
+// P1 then waits for them to become zombies in parent() 
+int main(int argc, char *argv[ ])
+{
+    int pid;
+    pid = getpid();
+    in = open("/dev/tty0", 0);
+    out= open("/dev/tty0", 1);
+    //printf("Got PID: %d\n", pid);
+    printf("\nIN: %d OUT: %d\n", in, out);
+
+    printf("\nINIT forks %d login processes\n", pid);
+
+    console = fork();
+    printf("CONSOLE: %d\n", console);
+    if (console)
+    {
+        //gets(t);
+        serial0 = fork();
+        printf("SERIAL0: %d\n", serial0);
+        if (serial0)
+        {
+            //gets(t);
+            serial1 = fork();
+            printf("SERIAL1: %d\n", serial1);
+            if (serial1)
+                parent();
+            else
+            {
+                //pause(1);
+                login("/dev/ttyS1");
+            }
+        }
+        else
+        {
+            //pause(1);
+            login("/dev/ttyS0");
+        }
+    }
+    else
+        login("/dev/tty0");
+
+    return 0;
+}
+
+#endif/***************************************************************/
+//Konstantin Shvedov
+/**************************LOGIN.C******************************/
+// This is the login process, first thing called when a new port
+// is activated
+/***************************************************************/
+
+#include "ucode.c"
+#include "xtr.c"
+int in, out, err;
+int fd;
+
+int p = 1319;
+int q = 6997;
+char *salt1 = "y5r'ttFm{!~](LZE";
+char *salt2 = "-?}Wrcq]Q8TfX_aU";
+
+char uname[128], upassword[128], t[64];
+char pline[64], mytty[64], *pname[8], tknz[8][64];
+
+// this is the encryption method used to encrypt the
+// password, and int is stored in the password file
+// which is compared to an attempted hash password
+unsigned int encrypt(char *pass)
+{
+    unsigned int hash = p*q;
+    char s[128] = "";
+    char c;
+    strcpy(s, salt1);
+    strcat(s, pass);
+    strcat(s, salt2);
+    while (c = *pass++)
+        hash = ((hash << 5) + hash) + c;
+    return hash;
+}
+
+// a new rokenize function just for seperating
+// informtation in the password file
+void tokenize(char *line)
+{
+    char *ptr = line;
+    for(int i=0; i < 7; i++)
+    {
+        char *temp;
+        temp = ptr;
+        while(*ptr != ':' && *ptr != '\0')
+        {
+            //printf("%c", *ptr);
+            *ptr++;
+        }
+        *ptr = '\0';
+        *ptr++;
+        strcpy(tknz[i], temp);
+    }
+}
+
+
+// Main loging process
+// argv[0]=login, argv[1]=/dev/ttyX
+main(int argc, char *argv[])
+{
+    //close file descriptors 0,1,2 inherited from INIT.
+    close(0); close(1); close(2);
+
+    //open argv[1] 3 times as in(0), out(1), err(2).
+    strcpy(mytty, argv[1]);
+
+    in  = open(mytty, 0);
+    out = open(mytty, 1);
+    err = open(mytty, 1);
+
+    // record mytty name string in PROC.tty
+    settty(mytty);
+
+    // print some essential info
+    printf("\nlogin: tty=%s\n", mytty);
+    printf("KAOSLOGIN: open %s as stdin = %d, stdout = %d, stderr = %d\n",
+            mytty, in, out, err);
+
+    //signal handler is installed for ctrl-c
+    signal(2, 1);
+
+    // infinite login process is launched till credentials match
+    while(1){
+        print2f("\n\rlogin:");
+        gets(uname);
+        print2f("password:");
+
+        // to imitate linux output is closed so password isn't seen
+        // when types
+        close(1);
+        gets(upassword);
+
+        //output is reopened to allow all other printing
+        out = open(mytty, 1);
+
+        print2f("\n\r");
+
+        // open /etc/passwd file for READ;
+        int pswdFile = open("/etc/passwd", 0);
+
+        while(getfline(line, pswdFile)){    // gets lines of file till EOF
+            //tokenize user account line
+            tokenize(line);
+            // checks if the user name and password match the one listed in the file
+            if(strcmp(tknz[0], uname) == 0 && atoi(tknz[1]) == encrypt(upassword))
+            {
+                //change uid, gid to user's uid, gid
+                chuid(atoi(tknz[3]), atoi(tknz[2]));
+                //change cwd to user's home DIR
+                chdir(tknz[5]);
+                //close opened /etc/passwd file
+                close(pswdFile);
+                //exec to program in user account (sh in all cases)
+                tknz[6][strlen(tknz[6]) - 1] = '\0';
+                char prog[64] = "../bin/";
+                kstrcat(prog, tknz[6]);
+                exec(prog);
+            }
+        }
+        print2f("\rlogin failed, try again\n\r");
+        close(pswdFile);
+    }
+}/***************************************************************/
+//Konstantin Shvedov
+/****************************SH.C*******************************/
+// This is the main shell that is in charge of redirections and
+// piping of processes that the user calls
+/***************************************************************/
+#include "ucode.c"
+#include "xtr.c"
+// user commands and syscall interface
+char cmdline[128], cmd[64];
+char cmdlineb[128], tknz[8][64];
+char uName[128], line[64];
+
+// very simple get command from user input function
+int newCommand()
+{
+    char dir[256];
+    print2f("\r  _____ _____ _____ _____    _____ _____ _____ __    __    \n");
+    print2f("\r |  |  |  _  |     |   __|  |   __|  |  |   __|  |  |  |   \n");
+    print2f("\r |    -|     |  |  |__   |  |__   |     |   __|  |__|  |__ \n");
+    print2f("\r |__|__|__|__|_____|_____|  |_____|__|__|_____|_____|_____|\n");
+    print2f("\r***********************************************************\n");
+    print2f("\rCMD's: [ ls | cat | more | grep | l2u | cp | man ]\n");
+    print2f("\rmore : [ logout | exit ]\n");
+    print2f("\rXTR's: [ pipes | > | >> | < ]\n");
+    print2f("\r***********************************************************\n");
+    getcwd(dir);
+    printf("\r%s@kaos:~%s$ ", uName, dir); // imi
+    gets(cmdline);
+    print2f("\r***********************************************************\n");
+    
+    int len = strlen(cmdline);
+    if(len > 1)
+    {
+        if (cmdline[len-1] == '\n')
+            cmdline[len-1] = '\0';
+    }
+    strcpy(cmdlineb, cmdline);
+}
+
+// absolutely pointless ascii art when logout is called
+void logOut()
+{
+    print2f("             .,-:;//;:=,\n\r");
+    print2f("        . :H@@@MM@M#H/.,+%;,\n\r");
+    print2f("      ,/X+ +M@@M@MM%=,-%HMMM@X/,\n\r");
+    print2f("     -+@MM; $M@@MH+-,;XMMMM@MMMM@+-\n\r");
+    print2f("    ;@M@@M- XM@X;. -+XXXXXHHH@M@M#@/.\n\r");
+    print2f("  ,%MM@@MH ,@%=  XIT EXI  .---=-=:=,.\n\r");
+    print2f("  -@#@@@MX .,  IT EXIT EXI -%HX$$%%%+;\n\r");
+    print2f(" =-./@M@M$  T EXIT EXIT EXI  .;@MMMM@MM:\n\r");
+    print2f(" X@/ -$MM/  EXIT EXIT EXIT E  .+MM@@@M$\n\r");
+    print2f(",@M@H: :@:  IT EXIT EXIT EXI  . -X#@@@@-\n\r");
+    print2f(",@@@MMX, .   EXIT EXIT EXIT   /H- ;@M@M=\n\r");
+    print2f(".H@@@@M@+,  IT EXIT EXIT EXI  %MM+..%#$.\n\r");
+    print2f(" /MMMM@MMH/.  IT EXIT EXIT E  XM@MH; -;\n\r");
+    print2f("  /%+%$XHH@$=  XIT EXIT E  , .H@@@@MX,\n\r");
+    print2f("   .=--------.   XIT EX  -%H.,@@@@@MX,\n\r");
+    print2f("   .%MM@@@HHHXX$$$%+- .:$MMX -M@@MM%.\n\r");
+    print2f("     =XMMM@MM@MM#H;,-+HMM@M+ /MMMX=\n\r");
+    print2f("       =%@M@M#@$-.=$@MM@@@M; %M%=\n\r");
+    print2f("          :+$+-,/H#MMMMMMM@- -,\n\r");
+    print2f("               =++%%%%+/:-.\n\r");
+}
+
+// tokenize wrapper function that returns number of args
+int tokenizecmd()
+{
+    token(cmdline);
+
+    return argc;
+}
+
+// tokenize funtion for lines in password file to get username
+void tokenize(char *line)
+{
+    char *ptr = line;
+    for(int i=0; i < 7; i++)
+    {
+        char *temp;
+        temp = ptr;
+        while(*ptr != ':' && *ptr != '\0')
+        {
+            *ptr++;
+        }
+        *ptr = '\0';
+        *ptr++;
+        strcpy(tknz[i], temp);
+    }
+}
+
+// Gets username from file by comparing uid of current user
+// and the ones in file
+void getUname()
+{
+    int pswdFile = open("/etc/passwd", 0);
+    int uid = getuid();
+
+    while(getfline(line, pswdFile)){
+        //tokenize user account line
+        tokenize(line);
+        // checks if the user id match the one pulled from file
+        if(atoi(tknz[3]) == uid)
+        {
+            close(pswdFile);
+            strcpy(uName, tknz[0]);
+            return;
+        }
+    }
+    //should never get here!!!!!
+    print2f("Unexpected error, impossible!\n\r");
+    close(pswdFile);
+
+    // if it gets here, user logged in doesnt exist in the system
+    // shell is closed to avoid any tampering
+    close(0);
+}
+
+// checks input for if there is any pipes, if there is the number
+// is returned 
+int checkPipe()
+{
+    int opipe = 0;
+    for(int i = 0; i < argc; i++)\
+    {
+        if(!strcmp(argv[i],"|"))
+            opipe++;
+    }
+    return opipe;
+}
+
+// once everything has been acounted for, like pipes
+// the cmd is activated
+void execCmd(char** input)
+{
+    int i = 0, j = 0, fd = 0;
+    char excmd[128] = {0};
+
+    // if there is any redirection the according output or
+    // input is opened and removed from finall call
+    for(i = 0; input[i] != 0; i++)
+    {
+        if (strcmp(input[i], "<") == 0) // input
+        {
+            close(0);
+            fd = open(input[i + 1], O_RDONLY);
+            input[i] = 0;
+        }
+        else if (strcmp(input[i], ">") == 0) // output
+        {
+            close(1);
+            fd = open(input[i + 1], O_WRONLY | O_CREAT);
+            input[i] = 0;
+        }
+        else if (strcmp(argv[i], ">>") == 0) // output and append
+        {
+            close(1);
+            fd = open(input[i + 1], O_WRONLY | O_APPEND | O_CREAT);
+            input[i] = 0;
+        }
+    }
+
+    // string is made without redirection for execution
+    for(j = 0; j < i; j++)
+    {
+        if (input[j] != 0)
+        {
+            strcat(excmd, input[j]);
+            if ((j+1) < i)
+                strcat(excmd, " ");
+        }
+        else
+            j = i;
+    }
+    // command is executed
+    exec(excmd);
+}
+
+// if there are any pipes in the command inputed by user
+// they are put through the piping process
+void execPipe(int pipeNum, char** input)
+{
+    char *left[1024] = { 0 };
+    char *right[1024] = { 0 };
+    int i = 0;
+    int j = 0;
+
+    // smallest part on the left is seperated
+    while(strcmp(input[i], "|") != 0)
+    {
+        left[i] = input[i];
+        i++;
+    }
+    i++;
+    // the rest of the pipe is the right
+    while(argv[i] != 0)
+    {
+        right[j] = input[i];
+        i++;
+        j++;
+    }
+
+    // very helpful for unsertstanding where things are going wrong
+    /*print2f("Left Side: ");
+    for (int k = 0; left[k] != 0; k++)
+    {
+        printf("%s ", left[k]);
+    }
+    print2f("\n\r");
+
+    print2f("Right Side: ");
+    for (int k = 0; right[k] != 0; k++)
+    {
+        printf("%s ", right[k]);
+    }
+    print2f("\n\r"); */
+
+    pipeNum--;
+
+    // pipes are created and process are forked into them
+    int pd[2], pid;
+    pipe(pd);
+    pid = fork();
+
+    // the rest of the pipe is recursively complete
+    if(pid)// parent as pipe Reader
+    {
+        close(pd[1]);
+        close(0);
+        dup2(pd[0], 0);
+        //close(pd[0]);
+        if (pipeNum <= 0)
+            execCmd(right);
+        else execPipe(pipeNum, right);
+    }
+    else// child as pipe Writer
+    {
+        close(pd[0]);
+        close(1);
+        dup2(pd[1], 1);
+        //close(pd[1]);
+        execCmd(left); // left most part of pipe executed
+    }
+}
+
+// checks the cmd inputed and if not logout or exit executes pipe
+// or pipe
+int execCmdL()
+{
+    int pid, status, opipe;
+
+    strcpy(cmd, argv[0]);
+    if (!strcmp(cmd,"exit"))
+        exit(0);
+
+    if (!strcmp(cmd,"logout"))
+        {
+            print2f("Logging out");
+            print2f(".");
+            print2f(".");
+            print2f(".\n\r");
+            logOut();
+            exit(0);
+        }
+
+    opipe = checkPipe();
+
+    pid = fork();           // fork a child process to execute the cmd line
+
+    if (pid)                // parent sh waits for child to die
+        pid = wait(&status);
+    else                    // child exec cmdline
+    {
+        if(!opipe)          // if no pipes, simply executes command
+        {
+            execCmd(argv);  // exec("cmd a1 a2 ... an");
+        }
+        else
+        {
+            execPipe(opipe, argv);
+        }
+    }
+}
+
+// main for sh
+main(int argc, char *argv[ ])
+{
+    char t[64];
+    int cmdNum;
+    getUname();
+    while(1){
+        //display executable commands in /bin directory
+        // prompt for a command line cmdline = "cmd a1 a2 .... an"
+        newCommand();
+        cmdNum = tokenizecmd(); //tokenises commands
+        //printf("\rCommands inputed: %d\n", cmdNum);
+
+        if (cmdNum > 0)
+        {
+            print2f("\r*********************EXECUTING COMMAND*********************\n\r");
+            execCmdL();
+            print2f("\r*********************COMMAND EXECUTED**********************\n\r");
+        }
+    }
+    return 0;
+}/***************************************************************/
+//Konstantin Shvedov
+/****************************LS.C*******************************/
+// This is the ls function that dipslays all files within
+// the location specified
+/***************************************************************/
+#include "ucode.c"
+int BLKSIZE = 1024, chng = 0, chng2 = 0;
+char loc[1024];
+char dUse[1024] = "";
+
+// a fancy printf that basically left aligns text
+void fancyPrint2f(char *str, char *end, int len)
+{
+    int s, e;
+    char final[256] = "";
+    s = strlen(str);
+    e = strlen(end);
+
+    strcpy(final, str);
+
+    if((s+e) >= len)
+    {
+        strcat(final, end);
+    }
+    else
+    {
+        int t;
+        t = len - (s + e);
+        while (t > 0)
+        {
+            strcat(final, " ");
+            t--;
+        }
+        strcat(final, end);
+    }
+    print2f(final);
+}
+
+// itoa wasnt working, made my own implementation of
+// integer to string
+char* itoa(int x, char **s)
+{
+    char num[32] = "", temp[32]= "";
+    int i = 0, j = 0;
+    s[0] = '\0';
+    if (x==0){
+       strcpy(s, "0");
+       return "0";
+    }
+    if (x < 0){
+       num[i] = '-';
+       i++;
+       x = -x;
+    }
+    while (x != 0)
+    {
+        temp[j] = ctable[x%10];
+        j++;
+        x = (int)x/10;
+    }
+    j--;
+    for(; j >= 0; j--)
+    {
+        num[i] = temp[j];
+        i++;
+    }
+    num[i] = '\0';
+    strcpy(s, num);
+
+    return num;
+}
+
+//prints all details about a file
+void ls_file(char *fname, char *loc2)
+{
+    //printf("NAME:%s\n", fname);
+    STAT fstat, *sp = &fstat;
+    int r, i;
+    int l = strlen(loc2);
+
+    if (loc2[l -1] != '/' && chng == 0)
+        {
+            loc2[l++] = '/';
+            loc2[l] = '\0';
+        }
+
+    //print2f(loc2);
+    //print2f(fname);
+
+    if(strlen(loc2) > 0 && chng == 0)
+    {
+        strcat(loc2, fname);
+    }
+
+    r = stat(loc2, sp);
+    if (r != 0)
+    {
+        printf("File \"%s\" doesn't exist\n\r", loc2);
+        return;
+    }
+    
+    if ((sp->st_mode & 0xF000) == 0x4000)      // if (S_ISDIR())
+        print2f("d");
+    else if ((sp->st_mode & 0xF000) == 0x8000) // if (S_ISREG())
+        print2f("-");
+    else if ((sp->st_mode & 0xF000) == 0xA000) // if (S_ISLNK())
+        print2f("l");
+    for(int i = 8; i >=0; i--)
+    {
+        if (sp->st_mode & (1 << i))
+        print2f("r");
+        else print2f("-");
+        i--;
+        if (sp->st_mode & (1 << i))
+        print2f("w");
+        else print2f("-");
+        i--;
+        if (sp->st_mode & (1 << i))
+        print2f("x");
+        else print2f("-");
+    }
+    char s[32] = "";
+
+    itoa(sp->st_nlink, s);
+    fancyPrint2f("", s, 4);
+    itoa(sp->st_gid, s);
+    fancyPrint2f("", s, 4);
+    itoa(sp->st_uid, s);
+    fancyPrint2f("", s, 4);
+    itoa(sp->st_size, s);
+    fancyPrint2f("", s, 10);
+    if (chng == 1)
+        printf(" %s", dUse);
+    else
+        printf(" %s", fname);
+    print2f(" \n\r");
+}
+
+//list all files at location specified and then sends to ls_file
+int ls_dir(char *dname)
+{
+    char buffer[1024];
+    char name[256];             // EXT2 filename: 1-255 chars
+    char location[256];
+    DIR *dp;
+
+    int fd = open(dname, O_RDONLY);     // opendir() syscall
+    read(fd, buffer, 1024);
+
+    char *cp = buffer;
+    dp = (DIR*)buffer;
+
+    while(cp < 1024 + buffer)// loops through files in dir
+    {
+        strcpy(location, loc);
+        strcpy(name, dp->name);
+        name[dp->name_len] = '\0';
+
+        ls_file(name, location);
+
+        cp += dp->rec_len;
+        dp = (DIR*)cp;
+    }
+}
+
+
+// main functions for ls
+int main(int argc, char *argv[])
+{
+    print2f("\r>>>>>>>>>>>>>>>>>>>>>>>>>>KAOS LS<<<<<<<<<<<<<<<<<<<<<<<<<<\n\r");
+    struct stat mystat, *sp;
+    int r;
+    char *s;
+    char filename[1024], cwd[1024];
+    chng = 0;
+
+    s = argv[1];                // ls [filename]
+
+    if (argc == 1)              // no parameter: ls CWD
+        s = "./";
+    sp = &mystat;
+
+    strcpy(dUse, s);
+
+    if ((r = stat(s, sp)) < 0)  // stat() syscall
+    {
+        print2f("There was an error with ls with:\n\r");
+        printf("\"%s\"\n\r", s);
+        exit(1);
+    }
+
+    strcpy(filename, s);
+    strcpy(loc, s);
+
+    if (s[0] != '/'){           // filename is relative to CWD
+        getcwd(cwd);            // get CWD path
+        strcpy(filename, cwd);
+        //strcat(filename, "/");
+        strcat(filename,s);     // construct $CWD/filename
+    }
+
+    if ((sp->st_mode & 0xF000) == 0x4000)
+        ls_dir(filename);       // list DIR
+    else
+    {   chng = 1;
+        ls_file(filename, loc); // list single file
+    }
+}/***************************************************************/
+//Konstantin Shvedov
+/****************************CAT.C******************************/
+// My cat, this cat can print from anywhere to anywhere, no matter
+// the redirections and amount of pipes
+/***************************************************************/
+
+#include "ucode.c"
+#include "xtr.c"
+
+#define BLKSIZE 4096
+
+// main for cat
+int main(int argc, char *argv[ ])
+{
+    print2f("\r>>>>>>>>>>>>>>>>>>>>>>>>KAOS CAT ROAR<<<<<<<<<<<<<<<<<<<<<<\n\r");
+    int fd, afd, in = 0, out, i, m, n, len, change;
+    char buf[BLKSIZE] = "", c = 0, mytty;
+    STAT fs;
+    fd = 0; // default to stdin
+    afd = 0;
+    if (argc > 1){
+        close(0);
+        fd = open(argv[1], O_RDONLY);
+        in = 1;
+        if (fd < 0) exit(1); // file couldnt be open, quits
+    }
+
+    //printi(fd);
+    // checks if the file has been redirected
+    afd = redirection();
+    out = isfile(1);
+
+    i = 0;
+    while (n = read(fd, &c, 1)){
+        if (in == 0) //if reading from stdin
+        {
+            if (afd == 0) //if more than three cats
+            {
+                if (c == 4) //ctrl-d is pressed
+                {
+                    exit(0);
+                }
+                else if (c == '\r')// enter is hit, buffer is printed
+                {
+                    c = '\n', cr = '\r';
+
+                    buf[i++] = '\n';
+                    if (out == 1)
+                    {
+                        write(2, &c, 1);
+                        write(2, &cr, 1);
+                    }
+                    else
+                    {
+                        write(1, &c, 1);
+                        write(1, &cr, 1);
+                        buf[i++] = '\r';
+                    }
+
+                    buf[i] = '\0';
+                    len = (int)strlen(buf);
+                    write(1, buf, len);
+                    i = 0;
+                }
+                else // while return isnt pressed
+                {   
+                    cr = '\r';
+                    buf[i++] = c;
+                    if (out == 1)
+                    {
+                        write(2, &c, 1);
+                    }
+                    else
+                    {
+                        write(1, &c, 1);
+                        if (c == '\n')
+                            write(1, &cr, 1);
+                    }
+                }
+            }
+            else
+            {
+                char cr = '\r';
+                // no matter if there is an '\r' made
+                // new one printed after '\n'
+                if (c == '\n' && out == 0)
+                {
+                    write(1, &c, 1);
+                    write(2, &cr, 1);
+                }
+                else if (c == '\r' && out == 0) //doesnt pass on '\r' values
+                    continue;
+                else                //all other characters are written
+                    write(1, &c, 1);
+            }
+        }
+        else
+        {
+            if(out == 0) // if outputing to stdout
+            {
+                mputc(c);
+            }
+            else
+            {
+                write(1, &c, 1);
+            }
+        }
+    }
+}/***************************************************************/
+//Konstantin Shvedov
+/****************************MORE.C*****************************/
+// More function, based of cat in many way, will allow a person
+// to go through text using space (screen) or enter (line)
+/***************************************************************/
+#include "ucode.c"
+#include "xtr.c"
+
+#define BLKSIZE 1024
+
+int getmfline(char *s, int file)
+{
+  int c;  
+  char *cp = s;
+  
+  c = getfc(file);
+
+  while ((c != EOF) && (c != '\n')){
+    if (c != '\r')
+        *cp++ = c;
+     c = getfc(file);
+  }
+  if (c==EOF) return 0;
+
+  *cp++ = c;         // a string with last char=\n or \r
+  *cp = 0;    
+  //printf("getline: %s", s); 
+  return strlen(s);  // at least 1 because last char=\r or \n
+}
+
+int writeLine(int fd, int lines)
+{
+    int n, m;
+    char buf[BLKSIZE];
+
+    for(int i = 0; i < lines; i++)
+    {
+        if(n = getmfline(buf, fd))
+        {
+            buf[n] = '\r';
+            n++;
+            m = write(1, buf, n);
+            if (m == 0)
+                exit(0);
+        }
+        if (n == 0)
+            exit(0);
+    }
+}
+
+int main(int argc, char *argv[ ])
+{
+    print2f("\r>>>>>>>>>>>>>>>>>>>>>>>>>>KAOS MORE<<<<<<<<<<<<<<<<<<<<<<<<\n\r");
+    int fd, i, m, n, pgl = 23, in = 0, out, ttyfd;
+    char c, mytty[64], c2, c3;
+    fd = 0; // default to stdin
+
+    if (argc > 1)
+    {
+        fd = open(argv[1], O_RDONLY);
+        in = 1;
+        if (fd < 0) exit(1);
+    }
+    writeLine(fd, pgl);
+    
+    //close(0);
+    gettty(mytty);
+    ttyfd = open(mytty, O_RDONLY);
+    
+    out = isfile(1);
+
+    while (1)
+    {
+        n = read(ttyfd, &c, 1);
+
+        if (c == 4)
+            exit(0);
+        else if (c == '\r')
+            writeLine(fd, 1);
+        else if (c == ' ')
+            writeLine(fd, pgl);
+    }
+}/****************************************************************/
+//Konstantin Shvedov
+/****************************GREP.C******************************/
+// GREP searches for a pattern from any kind of redirection
+// and prints to any
+/***************************************************************/
+
+#include "ucode.c"
+#include "xtr.c"
+
+#define BLKSIZE 1024
+
+//checks if a string contains another
+int contains(char *string, char *pattern)
+{
+    int sl= 0, pl = 0, s = 0;
+    char *ps;
+    sl = strlen(string);
+    pl = strlen(pattern);
+    ps = string;
+
+    for(; s < sl; s++)
+    {
+        if (strncmp(ps, pattern, pl) == 0)
+        {
+            return 1;
+        }
+        ps++;
+    }
+    return 0;
+}
+
+//main function for grep argv[1] is pattern
+int main(int argc, char *argv[ ])
+{
+    print2f("\r>>>>>>>>>>>>>>>>>>>>>>>>>KAOS GREP<<<<<<<<<<<<<<<<<<<<<<<<<<\n\r");
+    int fd, afd, in = 0, out, outfd, i, m, n, len, change, cont = 0;
+    char buf[BLKSIZE] = "", c = 0, mytty;
+    STAT fs;
+    fd = 0; // default to stdin
+    afd = 0;
+    if (argc > 2){
+        close(0);
+        fd = open(argv[2], O_RDONLY);
+        in = 1;
+        if (fd < 0) exit(1); // file couldnt be open, quits
+    }
+    if(argc < 2)
+        exit(0);
+
+    //printi(fd);
+    // checks if the file has been redirected
+    afd = redirection();
+    out = isfile(1);
+
+    fstat(1, &fs);
+    outfd = fs.st_dev;
+
+    //printi(in);
+    //printi(out);
+    i = 0;
+    while (n = read(fd, &c, 1)){
+        if (in == 0) // if from stdin
+        {
+            if (afd == 0) // if more than 3 redirections
+            {
+                if (c == 4)
+                {
+                    exit(0);
+                }
+                else if (c == '\r')// enter is hit, buffer is printed
+                {
+                    c = '\n', cr = '\r';
+
+                    buf[i++] = '\n';
+                    if (out == 1)
+                    {
+                        write(2, &c, 1);
+                        write(2, &cr, 1);
+                    }
+                    else
+                    {
+                        write(1, &c, 1);
+                        write(1, &cr, 1);
+                        buf[i++] = '\r';
+                    }
+
+                    buf[i] = '\0';
+                    len = (int)strlen(buf);
+                    if (contains(buf, argv[1]))
+                        write(1, buf, len);
+                    i = 0;
+                }
+                else
+                {   
+                    cr = '\r';
+                    buf[i++] = c;
+                    if (out == 1)
+                    {
+                        write(2, &c, 1);
+                    }
+                    else
+                    {
+                        write(1, &c, 1);
+                        if (c == '\n')
+                            write(1, &cr, 1);
+                    }
+                }
+            }
+            else
+            {
+                char cr = '\r';
+                // no matter if there is an '\r' made
+                // new one printed after '\n'
+                if (c == '\n')
+                {
+                    buf[i++] = c;
+                    buf[i] = '\0';
+                    if (contains(buf, argv[1]))
+                    {
+                        write(1, buf, (int)strlen(buf));
+
+                        if (out == 0)
+                            write(2, &cr, 1);
+                    }
+                    i = 0;
+                }
+                else if (c == '\r' && out == 0) //doesnt pass on '\r' values
+                    continue;
+                else                //all other characters are written
+                    buf[i++] = c;
+            }
+        }
+        else
+        {
+            char cr = '\r';
+            if (c == '\n')
+            {
+                buf[i++] = c;
+                buf[i] = '\0';
+                if (contains(buf, argv[1]))
+                {
+                    write(1, buf, (int)strlen(buf));
+                    if (out == 0)
+                        write(1, &cr, 1);
+                }
+                i = 0;
+            }
+            else
+                buf[i++] = c;
+        }
+    }
+}/***************************************************************/
+//Konstantin Shvedov
+/****************************L2U.C******************************/
+// transforms text from lower to upper
+//can either fo file to file or stdin to stdout
+/***************************************************************/
+#include "ucode.c"
+#include "xtr.c"
+
+int main(int argc, char *argv[ ])
+{
+    char c;
+    int fd = 0, rd = 0;
+    if(argc == 3) // if from file to file
+    {
+        close(0);
+        fd = open(argv[1], O_RDONLY);
+        close(1);
+        open(argv[2], O_WRONLY|O_CREAT);
+    }
+    if(argc == 2 || argc > 3)
+        exit(0);
+
+    rd = redirection(); //used to make sure that we are piping
+    
+    while(read(0, &c, 1) > 0)
+    {
+        char cr = '\r';
+        if(fd == 0 && c == '\r' && rd == 0)
+            c = '\n';
+        if (c >= 'a' && c <= 'z')
+            c = c - ('a' - 'A');
+        write(1, &c, 1);
+        if(fd == 0 && c == '\n')
+            write(1, &cr, 1);
+    }
+}/***************************************************************/
+//Konstantin Shvedov
+/*****************************CP.C******************************/
+// Copies file from one location to another, uses cat
+/***************************************************************/
+#include "ucode.c"
+
+int main(int argc, char *argv[ ])
+{
+    if (argc != 3)
+        exit(0);
+    char cmd[256];
+    strcpy(cmd, "cat ");
+    strcat(cmd, argv[1]);
+    close(1);
+    open(argv[2], O_WRONLY|O_CREAT);
+    exec(cmd);
+}/***************************************************************/
+//Konstantin Shvedov
+/****************************MAN.C******************************/
+// Manual page for all funtions implemented
+/***************************************************************/
+#include "ucode.c"
+void ls(void);
+void cat(void);
+void more(void);
+void grep(void);
+void l2u(void);
+void cp(void);
+
+// asks the user if no function given and then calls function
+// to print description
+int main(int argc, char *argv[])
+{
+    char manPage[64];
+    if (argc == 1)
+    {
+        print2f("What manual page do you want?\n\r");
+        gets(manPage);
+    }
+    else if (argc == 2)
+        strcpy(manPage, argv[1]);
+    else
+        exit(0);
+    
+    print2f("\n\r");
+
+    if(!strcmp(manPage, "ls"))
+        ls();
+    else if(!strcmp(manPage, "cat"))
+        cat();
+    else if(!strcmp(manPage, "more"))
+        more();
+    else if(!strcmp(manPage, "grep"))
+        grep();
+    else if(!strcmp(manPage, "l2u"))
+        l2u();
+    else if(!strcmp(manPage, "cp"))
+        cp();
+    else
+        print2f("Page doesn't exist\n\r");
+    print2f("\n\r");
+    exit(0);
+}
+
+void ls(void)
+{
+    print2f("NAME\n\r");
+    print2f("\tls - list directory contents\n\r");
+    print2f("SYNOPSIS\n\r");
+    print2f("\tls [FILE]\n\r");
+    print2f("DESCRIPTION\n\r");
+    print2f("\tList  information  about the FILEs (the current directory by default).\n\r");
+}
+
+void cat(void)
+{
+    print2f("NAME\n\r");
+    print2f("\tcat - concatenate files and print on the standard output\n\r");
+    print2f("SYNOPSIS\n\r");
+    print2f("\tCAT [FILE]\n\r");
+    print2f("DESCRIPTION\n\r");
+    print2f("\tConcatenate FILE(s) to standard output.\n\r\n\r");
+    print2f("\tWith no FILE, read standard input.\n\r");
+}
+
+void more(void)
+{
+    print2f("NAME\n\r");
+    print2f("\tmore - file perusal filter for crt viewing\n\r");
+    print2f("SYNOPSIS\n\r");
+    print2f("\tmore [FILE]\n\r");
+    print2f("DESCRIPTION\n\r");
+    print2f("\tmore  is  a filter for paging through text one screenful at a time.\n\r");
+}
+
+void grep(void)
+{
+    print2f("NAME\n\r");
+    print2f("\t grep - print lines matching a pattern\n\r");
+    print2f("SYNOPSIS\n\r");
+    print2f("\tgrep patter [FILE]\n\r");
+    print2f("DESCRIPTION\n\r");
+    print2f("\tgrep  searches  for PATTERN in each FILE.  If no FILE\n\r");
+    print2f("\tgrep  reads standard input. By default, grep prints the matching lines.\n\r");
+    exit(0);
+}
+
+void l2u(void)
+{
+    print2f("NAME\n\r");
+    print2f("\tl2u - convert lower case to upper case\n\r");
+    print2f("SYNOPSIS\n\r");
+    print2f("\tl2u [FILE1 FILE2]\n\r");
+    print2f("DESCRIPTION\n\r");
+    print2f("\tl2u coppies file and changes all text to uppercase. If no input\n\r");
+    print2f("\tstandard input is used\n\r");
+}
+
+void cp(void)
+{
+    print2f("NAME\n\r");
+    print2f("\tcp - copy files and directories\n\r");
+    print2f("SYNOPSIS\n\r");
+    print2f("\tcp SOURCE DEST\n\r");
+    print2f("DESCRIPTION\n\r");
+    print2f("\tCopy SOURCE to DEST.\n\r");
+}

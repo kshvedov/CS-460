@@ -1,10 +1,17 @@
-/********************* sh.c file ***********************/
+/***************************************************************/
+//Konstantin Shvedov
+/****************************SH.C*******************************/
+// This is the main shell that is in charge of redirections and
+// piping of processes that the user calls
+/***************************************************************/
 #include "ucode.c"
+#include "xtr.c"
 // user commands and syscall interface
 char cmdline[128], cmd[64];
 char cmdlineb[128], tknz[8][64];
 char uName[128], line[64];
 
+// very simple get command from user input function
 int newCommand()
 {
     char dir[256];
@@ -18,7 +25,7 @@ int newCommand()
     print2f("\rXTR's: [ pipes | > | >> | < ]\n");
     print2f("\r***********************************************************\n");
     getcwd(dir);
-    printf("\r%s@kaos: %s$: ", uName, dir);
+    printf("\r%s@kaos:~%s$ ", uName, dir); // imi
     gets(cmdline);
     print2f("\r***********************************************************\n");
     
@@ -31,6 +38,7 @@ int newCommand()
     strcpy(cmdlineb, cmdline);
 }
 
+// absolutely pointless ascii art when logout is called
 void logOut()
 {
     print2f("             .,-:;//;:=,\n\r");
@@ -55,6 +63,7 @@ void logOut()
     print2f("               =++%%%%+/:-.\n\r");
 }
 
+// tokenize wrapper function that returns number of args
 int tokenizecmd()
 {
     token(cmdline);
@@ -62,6 +71,7 @@ int tokenizecmd()
     return argc;
 }
 
+// tokenize funtion for lines in password file to get username
 void tokenize(char *line)
 {
     char *ptr = line;
@@ -79,34 +89,8 @@ void tokenize(char *line)
     }
 }
 
-int getfc(int file)
-{
-   int c, n;
-   n = read(file, &c, 1);
-   if (n==0 || c==4 || c==0 ) return EOF;  
-                                
-   return (c&0x7F);
-}
-
-int getfline(char *s, int file)
-{
-  int c;  
-  char *cp = s;
-  
-  c = getfc(file);
-
-  while ((c != EOF) && (c != '\r') && (c != '\n')){
-    *cp++ = c;
-     c = getfc(file);
-  }
-  if (c==EOF) return 0;
-
-  *cp++ = c;         // a string with last char=\n or \r
-  *cp = 0;    
-  //printf("getline: %s", s); 
-  return strlen(s);  // at least 1 because last char=\r or \n
-}
-
+// Gets username from file by comparing uid of current user
+// and the ones in file
 void getUname()
 {
     int pswdFile = open("/etc/passwd", 0);
@@ -123,10 +107,17 @@ void getUname()
             return;
         }
     }
+    //should never get here!!!!!
     print2f("Unexpected error, impossible!\n\r");
     close(pswdFile);
+
+    // if it gets here, user logged in doesnt exist in the system
+    // shell is closed to avoid any tampering
+    close(0);
 }
 
+// checks input for if there is any pipes, if there is the number
+// is returned 
 int checkPipe()
 {
     int opipe = 0;
@@ -138,10 +129,15 @@ int checkPipe()
     return opipe;
 }
 
+// once everything has been acounted for, like pipes
+// the cmd is activated
 void execCmd(char** input)
 {
     int i = 0, j = 0, fd = 0;
     char excmd[128] = {0};
+
+    // if there is any redirection the according output or
+    // input is opened and removed from finall call
     for(i = 0; input[i] != 0; i++)
     {
         if (strcmp(input[i], "<") == 0) // input
@@ -164,6 +160,7 @@ void execCmd(char** input)
         }
     }
 
+    // string is made without redirection for execution
     for(j = 0; j < i; j++)
     {
         if (input[j] != 0)
@@ -175,13 +172,12 @@ void execCmd(char** input)
         else
             j = i;
     }
-
-    /*printi(fd);
-    print2f(excmd);
-    print2f("\n\r");*/
+    // command is executed
     exec(excmd);
 }
 
+// if there are any pipes in the command inputed by user
+// they are put through the piping process
 void execPipe(int pipeNum, char** input)
 {
     char *left[1024] = { 0 };
@@ -189,12 +185,14 @@ void execPipe(int pipeNum, char** input)
     int i = 0;
     int j = 0;
 
+    // smallest part on the left is seperated
     while(strcmp(input[i], "|") != 0)
     {
         left[i] = input[i];
         i++;
     }
     i++;
+    // the rest of the pipe is the right
     while(argv[i] != 0)
     {
         right[j] = input[i];
@@ -202,7 +200,8 @@ void execPipe(int pipeNum, char** input)
         j++;
     }
 
-    print2f("Left Side: ");
+    // very helpful for unsertstanding where things are going wrong
+    /*print2f("Left Side: ");
     for (int k = 0; left[k] != 0; k++)
     {
         printf("%s ", left[k]);
@@ -214,18 +213,18 @@ void execPipe(int pipeNum, char** input)
     {
         printf("%s ", right[k]);
     }
-    print2f("\n\r");
+    print2f("\n\r"); */
 
     pipeNum--;
 
+    // pipes are created and process are forked into them
     int pd[2], pid;
     pipe(pd);
     pid = fork();
 
-    if(pid)//parent as pipe Reader
+    // the rest of the pipe is recursively complete
+    if(pid)// parent as pipe Reader
     {
-        //printf("PARENT PIPE:::PID: %d PPID: %d PRI: %d\n\r", getpid(), getppid(), getpri());
-        //printf("PD0: %d PD1: %d\n\r", pd[0], pd[1]);
         close(pd[1]);
         close(0);
         dup2(pd[0], 0);
@@ -234,18 +233,18 @@ void execPipe(int pipeNum, char** input)
             execCmd(right);
         else execPipe(pipeNum, right);
     }
-    else//child as pipe Writer
+    else// child as pipe Writer
     {
-        //printf("CHILD PIPE:::PID: %d PPID: %d PRI: %d\n\r", getpid(), getppid(), getpri());
-        //printf("PD0: %d PD1: %d\n\r", pd[0], pd[1]);
         close(pd[0]);
         close(1);
         dup2(pd[1], 1);
         //close(pd[1]);
-        execCmd(left);
+        execCmd(left); // left most part of pipe executed
     }
 }
 
+// checks the cmd inputed and if not logout or exit executes pipe
+// or pipe
 int execCmdL()
 {
     int pid, status, opipe;
@@ -272,9 +271,9 @@ int execCmdL()
         pid = wait(&status);
     else                    // child exec cmdline
     {
-        if(!opipe)
+        if(!opipe)          // if no pipes, simply executes command
         {
-            execCmd(argv); // exec("cmd a1 a2 ... an");
+            execCmd(argv);  // exec("cmd a1 a2 ... an");
         }
         else
         {
@@ -283,6 +282,7 @@ int execCmdL()
     }
 }
 
+// main for sh
 main(int argc, char *argv[ ])
 {
     char t[64];
@@ -292,7 +292,7 @@ main(int argc, char *argv[ ])
         //display executable commands in /bin directory
         // prompt for a command line cmdline = "cmd a1 a2 .... an"
         newCommand();
-        cmdNum = tokenizecmd();
+        cmdNum = tokenizecmd(); //tokenises commands
         //printf("\rCommands inputed: %d\n", cmdNum);
 
         if (cmdNum > 0)

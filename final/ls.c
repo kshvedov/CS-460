@@ -1,13 +1,15 @@
+/***************************************************************/
+//Konstantin Shvedov
+/****************************LS.C*******************************/
+// This is the ls function that dipslays all files within
+// the location specified
+/***************************************************************/
 #include "ucode.c"
 int BLKSIZE = 1024, chng = 0, chng2 = 0;
 char loc[1024];
 char dUse[1024] = "";
 
-int opendir(pathaname)
-{
-    return open(pathname, O_RDONLY);
-}
-
+// a fancy printf that basically left aligns text
 void fancyPrint2f(char *str, char *end, int len)
 {
     int s, e;
@@ -35,6 +37,8 @@ void fancyPrint2f(char *str, char *end, int len)
     print2f(final);
 }
 
+// itoa wasnt working, made my own implementation of
+// integer to string
 char* itoa(int x, char **s)
 {
     char num[32] = "", temp[32]= "";
@@ -141,13 +145,13 @@ int ls_dir(char *dname)
     char location[256];
     DIR *dp;
 
-    int fd = open(dname, O_RDONLY);    // opendir() syscall
+    int fd = open(dname, O_RDONLY);     // opendir() syscall
     read(fd, buffer, 1024);
 
     char *cp = buffer;
     dp = (DIR*)buffer;
 
-    while(cp < 1024 + buffer)
+    while(cp < 1024 + buffer)// loops through files in dir
     {
         strcpy(location, loc);
         strcpy(name, dp->name);
@@ -160,6 +164,8 @@ int ls_dir(char *dname)
     }
 }
 
+
+// main functions for ls
 int main(int argc, char *argv[])
 {
     print2f("\r>>>>>>>>>>>>>>>>>>>>>>>>>>KAOS LS<<<<<<<<<<<<<<<<<<<<<<<<<<\n\r");
@@ -198,6 +204,6 @@ int main(int argc, char *argv[])
         ls_dir(filename);       // list DIR
     else
     {   chng = 1;
-        ls_file(filename, loc);      // list single file
+        ls_file(filename, loc); // list single file
     }
 }

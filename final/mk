@@ -10,6 +10,17 @@ sudo mount -o loop sdimage /mnt
 ./mkf sh
 ./mkf man
 
+sudo cat init.c > allcode.txt
+sudo cat login.c >> allcode.txt
+sudo cat sh.c >> allcode.txt
+sudo cat ls.c >> allcode.txt
+sudo cat cat.c >> allcode.txt
+sudo cat more.c >> allcode.txt
+sudo cat grep.c >> allcode.txt
+sudo cat l2u.c >> allcode.txt
+sudo cat cp.c >> allcode.txt
+sudo cat man.c >> allcode.txt
+
 sudo cp -av passwd /mnt/etc
 sudo ls -lt /mnt/bin
 sudo umount /mnt

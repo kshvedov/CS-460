@@ -1,6 +1,12 @@
-/****************** Algorithm of login *******************/
-// login.c : Upon entry, argv[0]=login, argv[1]=/dev/ttyX
+/***************************************************************/
+//Konstantin Shvedov
+/**************************LOGIN.C******************************/
+// This is the login process, first thing called when a new port
+// is activated
+/***************************************************************/
+
 #include "ucode.c"
+#include "xtr.c"
 int in, out, err;
 int fd;
 
@@ -12,6 +18,9 @@ char *salt2 = "-?}Wrcq]Q8TfX_aU";
 char uname[128], upassword[128], t[64];
 char pline[64], mytty[64], *pname[8], tknz[8][64];
 
+// this is the encryption method used to encrypt the
+// password, and int is stored in the password file
+// which is compared to an attempted hash password
 unsigned int encrypt(char *pass)
 {
     unsigned int hash = p*q;
@@ -25,6 +34,8 @@ unsigned int encrypt(char *pass)
     return hash;
 }
 
+// a new rokenize function just for seperating
+// informtation in the password file
 void tokenize(char *line)
 {
     char *ptr = line;
@@ -43,38 +54,9 @@ void tokenize(char *line)
     }
 }
 
-int getfc(int file)
-{
-   int c, n;
-   n = read(file, &c, 1);
 
-   if (n==0 || c==4 || c==0 ) return EOF;  
-                                
-   return (c&0x7F);
-}
-
-// getline() does NOT show the input chars AND no cooking: 
-// for reditected inputs from a file which may contain '\b' chars
-
-int getfline(char *s, int file)
-{
-  int c;  
-  char *cp = s;
-  
-  c = getfc(file);
-
-  while ((c != EOF) && (c != '\r') && (c != '\n')){
-    *cp++ = c;
-     c = getfc(file);
-  }
-  if (c==EOF) return 0;
-
-  *cp++ = c;         // a string with last char=\n or \r
-  *cp = 0;    
-  //printf("getline: %s", s); 
-  return strlen(s);  // at least 1 because last char=\r or \n
-}
-
+// Main loging process
+// argv[0]=login, argv[1]=/dev/ttyX
 main(int argc, char *argv[])
 {
     //close file descriptors 0,1,2 inherited from INIT.
@@ -90,26 +72,34 @@ main(int argc, char *argv[])
     // record mytty name string in PROC.tty
     settty(mytty);
 
+    // print some essential info
     printf("\nlogin: tty=%s\n", mytty);
     printf("KAOSLOGIN: open %s as stdin = %d, stdout = %d, stderr = %d\n",
             mytty, in, out, err);
 
+    //signal handler is installed for ctrl-c
     signal(2, 1);
 
-    //open /etc/passwd file for READ;
+    // infinite login process is launched till credentials match
     while(1){
         print2f("\n\rlogin:");
         gets(uname);
         print2f("password:");
+
+        // to imitate linux output is closed so password isn't seen
+        // when types
         close(1);
         gets(upassword);
+
+        //output is reopened to allow all other printing
         out = open(mytty, 1);
 
         print2f("\n\r");
 
+        // open /etc/passwd file for READ;
         int pswdFile = open("/etc/passwd", 0);
 
-        while(getfline(line, pswdFile)){
+        while(getfline(line, pswdFile)){    // gets lines of file till EOF
             //tokenize user account line
             tokenize(line);
             // checks if the user name and password match the one listed in the file
